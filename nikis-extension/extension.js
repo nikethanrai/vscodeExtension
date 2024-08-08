@@ -3,27 +3,21 @@ const yaml = require('js-yaml');
 const fs = require('fs');
 const path = require('path');
 
-let components = [];
-let componentInstances = [];
+let entities = [];
 
-function parseYamlFile(filePath) {
-    try {
-        const fileContents = fs.readFileSync(filePath, 'utf8');
-        const docs = yaml.loadAll(fileContents);
-        return docs; // Returns an array of documents
-    } catch (error) {
-        console.error(`Error reading YAML file ${filePath}:`, error);
-        return null;
-    }
-}
-
-function findComponentsAndInstances(rootPath, componentsArray, componentInstancesArray) {
+function findEntities(rootPath, entitiesArray) {
     const files = fs.readdirSync(rootPath, { withFileTypes: true });
 
     files.forEach(file => {
         const filePath = path.join(rootPath, file.name);
+
+        // Ignore .git directory
+        if (file.isDirectory() && file.name === '.git') {
+            return;
+        }
+
         if (file.isDirectory()) {
-            findComponentsAndInstances(filePath, componentsArray, componentInstancesArray); // Recursively find in subdirectories
+            findEntities(filePath, entitiesArray); // Recursively find in subdirectories
         } else if (file.isFile() && (file.name.endsWith('.yaml') || file.name.endsWith('.yml'))) {
             console.log(`Parsing file: ${filePath}`);
             const fileContents = fs.readFileSync(filePath, 'utf8');
@@ -31,84 +25,78 @@ function findComponentsAndInstances(rootPath, componentsArray, componentInstance
             if (docs) {
                 const lines = fileContents.split('\n');
                 docs.forEach(doc => {
-                    if (doc && doc.kind === 'Component') {
-                        const componentName = doc.metadata.name;
-                        const startLine = lines.findIndex(line => line.includes(`name: ${componentName}`));
-                        const startColumn = lines[startLine].indexOf(`name: ${componentName}`);
+                    if (doc && doc.metadata && doc.metadata.name) {
+                        const entityName = doc.metadata.name;
+                        const startLine = lines.findIndex(line => line.trim().includes(`name: ${entityName}`));
+                        
+                        // Handle the case where startLine is -1
+                        if (startLine === -1) {
+                            console.warn(`Entity name '${entityName}' not found in the file: ${filePath}`);
+                            return;
+                        }
+                        
+                        const startColumn = lines[startLine].indexOf(`name: ${entityName}`);
 
-                        componentsArray.push({
-                            name: componentName,
+                        entitiesArray.push({
+                            name: entityName,
+                            kind: doc.kind,
                             filePath: filePath,
                             range: new vscode.Range(
                                 new vscode.Position(startLine, startColumn),
-                                new vscode.Position(startLine, startColumn + componentName.length)
-                            )
-                        });
-                    } else if (doc && doc.kind === 'ComponentInstance') {
-                        const componentInstanceName = doc.metadata.name;
-                        const startLine = lines.findIndex(line => line.includes(`name: ${componentInstanceName}`));
-                        const startColumn = lines[startLine].indexOf(`name: ${componentInstanceName}`);
-
-                        componentInstancesArray.push({
-                            name: componentInstanceName,
-                            componentName: doc.spec.component,
-                            filePath: filePath,
-                            range: new vscode.Range(
-                                new vscode.Position(startLine, startColumn),
-                                new vscode.Position(startLine, startColumn + componentInstanceName.length)
-                            )
+                                new vscode.Position(startLine, startColumn + entityName.length)
+                            ),
+                            references: extractReferences(doc.spec)
                         });
                     }
                 });
             }
         }
     });
+    
+    console.log(`Entities found: ${entitiesArray.length}`);
+}
 
-    console.log(`Components found: ${componentsArray.length}`);
-    console.log(`Component Instances found: ${componentInstancesArray.length}`);
+function extractReferences(spec) {
+    const references = [];
+    if (spec) {
+        const fieldsToExtract = [
+            'component',
+            'component_instance',
+            'target_component_instance',
+            'target_service',
+            'dependency'
+        ];
+
+        fieldsToExtract.forEach(field => {
+            if (spec[field]) {
+                references.push(spec[field]);
+            }
+        });
+    }
+    return references;
 }
 
 class YamlDefinitionProvider {
-    provideDefinition(document, position, token) {
-        const range = document.getWordRangeAtPosition(position);
-        const word = document.getText(range);
+    provideDefinition(document, position) {
+        // Expand the range to capture all text at the position
+        const wordRange = document.getWordRangeAtPosition(position, /[\w\-_\s]+/);
+        const word = document.getText(wordRange).trim();
 
         console.log(`Searching for definition of: ${word}`);
 
-        const componentName = this.getComponentNameFromInstance(document, word);
-        if (componentName) {
-            const component = this.findComponent(componentName);
-            if (component) {
-                console.log(`Component found: ${component.name}, at ${component.filePath}`);
-                return new vscode.Location(vscode.Uri.file(component.filePath), component.range.start);
-            } else {
-                console.log(`Component ${componentName} not found.`);
-            }
+        const entity = this.findEntity(word);
+        if (entity) {
+            console.log(`Entity found: ${entity.name}, at ${entity.filePath}`);
+            return new vscode.Location(vscode.Uri.file(entity.filePath), entity.range.start);
         } else {
-            console.log('No component name found in the current context.');
+            console.log(`Entity ${word} not found.`);
         }
         return null;
     }
 
-    getComponentNameFromInstance(document, word) {
-        const text = document.getText();
-        try {
-            const docs = yaml.loadAll(text);
-            for (const doc of docs) {
-                if (doc.kind === 'ComponentInstance' && doc.spec && doc.spec.component) {
-                    if (doc.metadata.name === word || doc.spec.component === word) {
-                        return doc.spec.component;
-                    }
-                }
-            }
-        } catch (e) {
-            console.error('Error parsing YAML:', e);
-        }
-        return null;
-    }
-
-    findComponent(name) {
-        return components.find(c => c.name === name) || null;
+    findEntity(name) {
+        // Match the entire string exactly for the name or references
+        return entities.find(e => e.name === name) || null;
     }
 }
 
@@ -118,10 +106,7 @@ function activate(context) {
     const rootPath = vscode.workspace.rootPath;
     if (!rootPath) return;
 
-    findComponentsAndInstances(rootPath, components, componentInstances);
-
-    console.log("Components found:", components);
-    console.log("Component Instances found:", componentInstances);
+    findEntities(rootPath, entities);
 
     const yamlDefinitionProvider = new YamlDefinitionProvider();
     context.subscriptions.push(
