@@ -106,7 +106,31 @@ function activate(context) {
     const rootPath = vscode.workspace.rootPath;
     if (!rootPath) return;
 
+    // Initial scan of the workspace
     findEntities(rootPath, entities);
+
+    // Watch for changes in YAML files
+    const yamlWatcher = vscode.workspace.createFileSystemWatcher('**/*.{yaml,yml}');
+
+    yamlWatcher.onDidCreate((uri) => {
+        console.log(`YAML file created: ${uri.fsPath}`);
+        entities = []; // Clear the entities array
+        findEntities(rootPath, entities); // Re-scan to include new file
+    });
+
+    yamlWatcher.onDidChange((uri) => {
+        console.log(`YAML file changed: ${uri.fsPath}`);
+        entities = []; // Clear the entities array
+        findEntities(rootPath, entities); // Re-scan to include changes
+    });
+
+    yamlWatcher.onDidDelete((uri) => {
+        console.log(`YAML file deleted: ${uri.fsPath}`);
+        entities = []; // Clear the entities array
+        findEntities(rootPath, entities); // Re-scan to remove deleted references
+    });
+
+    context.subscriptions.push(yamlWatcher);
 
     const yamlDefinitionProvider = new YamlDefinitionProvider();
     context.subscriptions.push(
@@ -118,6 +142,7 @@ function activate(context) {
 }
 
 function deactivate() {}
+
 
 module.exports = {
     activate,
