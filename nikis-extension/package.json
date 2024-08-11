@@ -1,7 +1,7 @@
 {
   "name": "AUD-Scout-Nikethan-Rai",
   "displayName": "AUD-Scout",
-  "description": "An extension that creates softlink for different kinds in your AUD. Authored by Nikethan Rai",
+  "description": "An extension that creates softlink for different definitions in your AUD. Authored by Nikethan Rai",
   "version": "0.0.1",
   "publisher": "Nikethan",
   "icon": "icon.png",
