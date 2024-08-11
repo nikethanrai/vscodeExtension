@@ -1,8 +1,10 @@
 {
-  "name": "nikis-extension",
-  "displayName": "Nikis Extension",
-  "description": "",
+  "name": "AUD-Scout-Nikethan-Rai",
+  "displayName": "AUD-Scout",
+  "description": "An extension that creates softlink for different kinds in your AUD. Authored by Nikethan Rai",
   "version": "0.0.1",
+  "publisher": "Nikethan",
+  "icon": "icon.png",
   "engines": {
     "vscode": "^1.92.0"
   },
@@ -42,6 +44,6 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
-    "nikis-extension": "file:"
+    "AUD-Scout-Nikethan-Rai": "file:"
   }
 }

@@ -78,19 +78,29 @@ function extractReferences(spec) {
 
 class YamlDefinitionProvider {
     provideDefinition(document, position) {
-        // Expand the range to capture all text at the position
-        const wordRange = document.getWordRangeAtPosition(position, /[\w\-_\s]+/);
-        const word = document.getText(wordRange).trim();
+        // Get the selected word range using a custom regex pattern that includes the needed characters
+        const wordRange = document.getWordRangeAtPosition(position, /[\w\-_\(\)\/\d\s]+/);
+        
+        // If there is a valid range, extract the text within that range
+        if (wordRange) {
+            let selectedText = document.getText(wordRange).trim();
 
-        console.log(`Searching for definition of: ${word}`);
+            // Ignore the first character if it's a hyphen
+            if (selectedText.startsWith('-')) {
+                selectedText = selectedText.slice(1).trim();
+            }
 
-        const entity = this.findEntity(word);
-        if (entity) {
-            console.log(`Entity found: ${entity.name}, at ${entity.filePath}`);
-            return new vscode.Location(vscode.Uri.file(entity.filePath), entity.range.start);
-        } else {
-            console.log(`Entity ${word} not found.`);
+            console.log(`Searching for definition of: ${selectedText}`);
+
+            const entity = this.findEntity(selectedText);
+            if (entity) {
+                console.log(`Entity found: ${entity.name}, at ${entity.filePath}`);
+                return new vscode.Location(vscode.Uri.file(entity.filePath), entity.range.start);
+            } else {
+                console.log(`Entity ${selectedText} not found.`);
+            }
         }
+
         return null;
     }
 
@@ -121,7 +131,7 @@ function activate(context) {
     yamlWatcher.onDidChange((uri) => {
         console.log(`YAML file changed: ${uri.fsPath}`);
         entities = []; // Clear the entities array
-        findEntities(rootPath, entities); // Re-scan to include changes
+        findEntities(rootPath, entities); // Re-scan to update the list
     });
 
     yamlWatcher.onDidDelete((uri) => {
@@ -142,7 +152,6 @@ function activate(context) {
 }
 
 function deactivate() {}
-
 
 module.exports = {
     activate,
